@@ -12,7 +12,7 @@ Turn-based empire layer; fights are auto-resolved for now, and the systems are b
 
 Uses URP (configured automatically on first open: Forward+, HDR, soft shadows, SSAO, post-processing). Menu **Mobland → Graphics** re-runs the URP setup or rebuilds materials.
 
-## Controls (Milestone 1)
+## Controls
 
 | Input | Action |
 |---|---|
@@ -52,6 +52,8 @@ Assets/Mobland/
 ```
 
 City data (`CityModel`: districts, blocks, buildings) is separate from the visuals, so gameplay systems never depend on meshes.
+Tune the city via **Assets → Create → Mobland → City Config** and assign it to the `GameRoot`.
+
 ## Textures
 
 All textures are generated procedurally by `Tools/textures/generate.py` (Python + numpy + Pillow):
@@ -63,4 +65,3 @@ python Tools/textures/generate.py asphalt    # just one set
 
 Facade textures are atlases of 4 window bays x 4 floors; buildings map one atlas cell per bay with a random offset,
 and the `_e` emission maps light windows at night.
-Tune the city via **Assets → Create → Mobland → City Config** and assign it to the `GameRoot`.
