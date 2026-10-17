@@ -61,6 +61,9 @@ namespace Mobland.Core
                     int ic = br.ReadInt32();
                     var idx = new int[ic];
                     for (int i = 0; i < ic; i++) idx[i] = br.ReadInt32();
+                    // Blender's counter-clockwise triangles come out counter-clockwise after the axis swap too;
+                    // Unity's front faces are clockwise, so flip each triangle.
+                    for (int i = 0; i + 2 < ic; i += 3) { int t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
                     m.Parts.Add((slot, idx));
                 }
                 return m;

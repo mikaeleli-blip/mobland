@@ -52,7 +52,7 @@ namespace Mobland.City
             return m;
         }
 
-        static Material Paint(Color c) => MaterialLibrary.Get(c, 0.72f, 0.15f);
+        static Material Paint(Color c) => MaterialLibrary.Get(c, 0.62f, 0.1f);
 
         public static System.Func<string, Material> Mapper(Look look)
         {
