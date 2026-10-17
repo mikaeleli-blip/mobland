@@ -2,7 +2,6 @@ using Mobland.CameraControl;
 using Mobland.City;
 using Mobland.UI;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace Mobland.Core
 {
@@ -23,6 +22,8 @@ namespace Mobland.Core
         public CameraRig Rig { get; private set; }
         public BuildingSelector Selector { get; private set; }
         public CityHud Hud { get; private set; }
+        public TimeOfDay DayCycle { get; private set; }
+        public CityAmbience Ambience { get; private set; }
 
         Transform cityRoot;
         GameObject overlay;
@@ -36,7 +37,8 @@ namespace Mobland.Core
             }
 
             Camera cam = SetupCamera();
-            SetupLighting(cam);
+            DayCycle = gameObject.AddComponent<TimeOfDay>();
+            DayCycle.Init(FindOrCreateSun(), cam);
 
             Rig = gameObject.AddComponent<CameraRig>();
             Rig.Cam = cam;
@@ -48,6 +50,10 @@ namespace Mobland.Core
             Hud.Root = this;
             Hud.Selector = Selector;
             Hud.Cam = cam;
+            Hud.DayCycle = DayCycle;
+
+            Ambience = gameObject.AddComponent<CityAmbience>();
+            Ambience.Init(DayCycle, Rig, cam);
         }
 
         void Start()
@@ -73,6 +79,7 @@ namespace Mobland.Core
             overlay = result.DistrictOverlay;
             SetOverlay(OverlayVisible);
 
+            Ambience.SetCity(result.LampLights, result.SmokePoints, result.Water, cityRoot);
             Rig.Frame(City.Bounds);
             Debug.Log($"[Mobland] City generated: seed {seed}, {City.Districts.Count} districts, {City.Buildings.Count} lots.");
         }
@@ -92,16 +99,17 @@ namespace Mobland.Core
                 cam = go.AddComponent<Camera>();
                 go.AddComponent<AudioListener>();
             }
-            cam.fieldOfView = 40f;
+            cam.fieldOfView = 35f;
             cam.nearClipPlane = 0.5f;
             cam.farClipPlane = 3000f;
+            cam.allowHDR = true;
+            cam.allowMSAA = true;
             return cam;
         }
 
-        static void SetupLighting(Camera cam)
+        static Light FindOrCreateSun()
         {
-            Light sun = null;
-            if (RenderSettings.sun != null) sun = RenderSettings.sun;
+            Light sun = RenderSettings.sun;
             if (sun == null)
             {
                 var go = GameObject.Find("Directional Light");
@@ -112,30 +120,7 @@ namespace Mobland.Core
                 sun = new GameObject("Sun").AddComponent<Light>();
                 sun.type = LightType.Directional;
             }
-
-            // Late-afternoon sun over the Hudson.
-            sun.transform.rotation = Quaternion.Euler(47f, -38f, 0f);
-            sun.color = new Color(1f, 0.89f, 0.74f);
-            sun.intensity = 1.15f;
-            sun.shadows = LightShadows.Soft;
-            sun.shadowStrength = 0.8f;
-
-            Color haze = new Color(0.60f, 0.58f, 0.54f);
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.56f, 0.59f, 0.66f);
-            RenderSettings.ambientEquatorColor = new Color(0.46f, 0.43f, 0.40f);
-            RenderSettings.ambientGroundColor = new Color(0.20f, 0.18f, 0.16f);
-            RenderSettings.fog = true;
-            RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = haze;
-            RenderSettings.fogStartDistance = 450f;
-            RenderSettings.fogEndDistance = 1400f;
-
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = haze;
-
-            // Shadows need to reach the zoomed-out view.
-            QualitySettings.shadowDistance = Mathf.Max(QualitySettings.shadowDistance, 600f);
+            return sun;
         }
     }
 }

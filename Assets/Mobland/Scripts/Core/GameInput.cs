@@ -12,7 +12,7 @@ namespace Mobland.Core
     /// </summary>
     public static class GameInput
     {
-        enum K { W, A, S, D, Q, E, Up, Down, Left, Right, LeftShift, RightShift, R, Tab, Home, Escape, F1 }
+        enum K { W, A, S, D, Q, E, Up, Down, Left, Right, LeftShift, RightShift, R, Tab, Home, Escape, F1, T, N }
 
 #if MOBLAND_INPUT_SYSTEM && ENABLE_INPUT_SYSTEM
         static Key Map(K k)
@@ -36,6 +36,8 @@ namespace Mobland.Core
                 case K.Home: return Key.Home;
                 case K.Escape: return Key.Escape;
                 case K.F1: return Key.F1;
+                case K.T: return Key.T;
+                case K.N: return Key.N;
                 default: return Key.None;
             }
         }
@@ -83,6 +85,8 @@ namespace Mobland.Core
                 case K.Home: return KeyCode.Home;
                 case K.Escape: return KeyCode.Escape;
                 case K.F1: return KeyCode.F1;
+                case K.T: return KeyCode.T;
+                case K.N: return KeyCode.N;
                 default: return KeyCode.None;
             }
         }
@@ -132,5 +136,7 @@ namespace Mobland.Core
         public static bool ResetCameraDown() => Pressed(K.Home);
         public static bool CancelDown() => Pressed(K.Escape);
         public static bool HelpToggleDown() => Pressed(K.F1);
+        public static bool TimePauseDown() => Pressed(K.T);
+        public static bool TimeSkipDown() => Pressed(K.N);
     }
 }

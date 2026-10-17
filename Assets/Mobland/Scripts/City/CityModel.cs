@@ -38,17 +38,22 @@ namespace Mobland.City
         public BlockInfo Block;
         public DistrictInfo District;
         public BuildingType Type;
+        public FacadeStyle Style;
         public Rect Footprint;           // XZ, Rect.y = world Z
-        public int Floors;
-        public int TowerFloors;          // setback tower floors (offices), included in Floors
+        public int Floors;               // total storeys including the ground floor
+        public int UpperFloors;
+        public int TowerFloors;          // setback tower floors (offices), counted in UpperFloors
+        public float GroundHeight;
         public float FloorHeight;
-        public float BaseRaise;          // raised ground floor (brownstones)
-        public float Height;             // total height of the main mass
+        public float Height;             // height of the main mass (below any setback tower)
+        public float TotalHeight;        // including tower
         public bool FacesNorth;          // front door faces +Z street if true, -Z street otherwise
         public bool CornerWest, CornerEast;
-        public bool HasFireEscape, HasWaterTower, HasBulkhead, HasChimney;
-        public Color FacadeColor;
-        public Color AccentColor;
+        public bool HasFireEscape, HasWaterTower, HasBulkhead, HasChimney, HasBillboard, HasSign;
+        public int AtlasU, AtlasV;       // random 0..3 offsets into the facade atlas
+        public int SignIndex, BillboardIndex;
+        public Color AccentColor;        // awning
+        public Color CorniceColor;
         public string Address;
 
         public Vector3 Center => new Vector3(Footprint.center.x, 0f, Footprint.center.y);

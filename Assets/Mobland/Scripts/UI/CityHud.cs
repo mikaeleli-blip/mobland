@@ -14,6 +14,7 @@ namespace Mobland.UI
         public GameRoot Root;
         public BuildingSelector Selector;
         public Camera Cam;
+        public TimeOfDay DayCycle;
 
         bool showHelp = true;
         readonly List<Rect> hudRects = new List<Rect>();   // screen-space (GUI coords, unscaled) for click blocking
@@ -85,6 +86,7 @@ namespace Mobland.UI
                 $"Seed <b>{city.Seed}</b>",
                 $"{city.Districts.Count} districts  ·  {city.Buildings.Count} lots  ·  {city.ParkCount} parks",
             };
+            if (DayCycle != null) lines.Insert(0, $"<size=18><b>{DayCycle.Clock}</b></size>{(DayCycle.paused ? "  <color=#A9A08F>(paused)</color>" : "")}");
             if (showHelp)
             {
                 lines.Add("");
@@ -94,6 +96,7 @@ namespace Mobland.UI
                 lines.Add("<b>Right-drag</b>  grab & pan");
                 lines.Add("<b>Left-click</b>  select building   <b>Esc</b>  clear");
                 lines.Add("<b>Tab</b>  district map   <b>Home</b>  reset view");
+                lines.Add("<b>T</b>  pause time   <b>N</b>  skip to next time of day");
                 lines.Add("<b>R</b>  generate a new city");
                 lines.Add("<b>F1</b>  hide help");
             }
@@ -106,7 +109,7 @@ namespace Mobland.UI
 
             float x = rect.x + 14f, y = rect.y + 12f;
             GUI.Label(new Rect(x, y, 330f, 28f), "MOBLAND", title); y += 28f;
-            GUI.Label(new Rect(x, y, 330f, 20f), "New York, 1925  ·  Milestone 1: The City", subtitle); y += 22f;
+            GUI.Label(new Rect(x, y, 330f, 20f), "New York, 1925", subtitle); y += 22f;
             foreach (var l in lines) { GUI.Label(new Rect(x, y, 330f, lineH), l, label); y += lineH; }
         }
 

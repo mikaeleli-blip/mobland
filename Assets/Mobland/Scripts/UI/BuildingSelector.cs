@@ -73,7 +73,7 @@ namespace Mobland.UI
             if (view == null || view.Info == null) { lr.enabled = false; return; }
             BuildingInfo b = view.Info;
             Rect f = b.Footprint;
-            float y = Mathf.Max(0.35f, b.Height + 0.45f);
+            float y = Mathf.Max(0.35f, b.TotalHeight + 0.45f);
             float pad = 0.3f;
             lr.SetPosition(0, new Vector3(f.xMin - pad, y, f.yMin - pad));
             lr.SetPosition(1, new Vector3(f.xMax + pad, y, f.yMin - pad));

@@ -9,6 +9,9 @@ namespace Mobland.City
         public CityModel Model;
         public Transform Root;
         public GameObject DistrictOverlay;
+        public List<Vector3> LampLights;
+        public List<Vector3> SmokePoints;
+        public Material Water;
     }
 
     /// <summary>
@@ -24,6 +27,9 @@ namespace Mobland.City
         Transform root;
 
         float[] colX, colW, rowZ, rowD;
+        readonly List<int> elAvenues = new List<int>();
+        readonly List<int> trolleyAvenues = new List<int>();
+        Material waterMat;
 
         public CityGenerator(CityConfig config) { cfg = config; }
 
@@ -42,12 +48,23 @@ namespace Mobland.City
             NameStreets();
             SubdivideLots();
 
+            PickRailAvenues();
+            BuildingMesher.SmokePoints.Clear();
+
             BuildGround();
             GameObject overlay = BuildDistrictOverlay();
             BuildBuildings();
+            var dresser = new StreetDresser(cfg, city, rng, elAvenues, trolleyAvenues);
+            dresser.Build(root);
 
             StaticBatchingUtility.Combine(rootGo);
-            return new CityBuildResult { Model = city, Root = root, DistrictOverlay = overlay };
+            return new CityBuildResult
+            {
+                Model = city, Root = root, DistrictOverlay = overlay,
+                LampLights = dresser.LampLights,
+                SmokePoints = new List<Vector3>(BuildingMesher.SmokePoints),
+                Water = waterMat,
+            };
         }
 
         // ====================================================================
@@ -253,6 +270,20 @@ namespace Mobland.City
                 city.StreetNames[j] = CityText.Ordinal(firstStreet + j) + " St";
         }
 
+
+        void PickRailAvenues()
+        {
+            elAvenues.Clear();
+            trolleyAvenues.Clear();
+            int bx = cfg.blocksX;
+            var interior = new List<int>();
+            for (int i = 1; i < bx; i++) interior.Add(i);
+            rng.Shuffle(interior);
+            int k = 0;
+            for (; k < Mathf.Min(cfg.elevatedRailways, interior.Count); k++) elAvenues.Add(interior[k]);
+            for (int t = 0; t < 2 && k < interior.Count; t++, k++) trolleyAvenues.Add(interior[k]);
+        }
+
         void SubdivideLots()
         {
             float sw = cfg.sidewalkWidth;
@@ -270,7 +301,6 @@ namespace Mobland.City
                 {
                     bool facesNorth = side == 1;
 
-                    // Split the row into lot widths.
                     var widths = new List<float>();
                     float x = inner.xMin, end = inner.xMax;
                     float minW = Mathf.Min(prof.lotWidthMin, inner.width);
@@ -296,7 +326,7 @@ namespace Mobland.City
                             case BuildingType.Warehouse:
                             case BuildingType.Factory:
                             case BuildingType.Office: depthFactor = rng.Range(0.88f, 0.98f); break;
-                            default: depthFactor = rng.Range(0.7f, 0.95f); break;
+                            default: depthFactor = rng.Range(0.7f, 0.92f); break;
                         }
                         float depth = rowDepth * depthFactor;
                         float z0 = facesNorth ? inner.yMax - depth : inner.yMin;
@@ -311,12 +341,14 @@ namespace Mobland.City
                             FacesNorth = facesNorth,
                             CornerWest = i == 0,
                             CornerEast = i == widths.Count - 1,
-                            FacadeColor = prof.PickFacade(rng),
                             AccentColor = rng.Pick(Palette.Awnings),
+                            AtlasU = rng.Range(0, 4),
+                            AtlasV = rng.Range(0, 4),
+                            SignIndex = rng.Range(0, 16),
+                            BillboardIndex = rng.Range(0, 8),
                         };
                         SetMassing(b, prof);
 
-                        // Address: house numbers grow away from the Fifth-Avenue-style centre line.
                         int streetIdx = facesNorth ? block.Z + 1 : block.Z;
                         float cx = x + w * 0.5f;
                         int number = 2 * Mathf.FloorToInt(Mathf.Abs(cx - midX) / 4f) + (facesNorth ? 2 : 1);
@@ -334,90 +366,111 @@ namespace Mobland.City
 
         void SetMassing(BuildingInfo b, DistrictProfile prof)
         {
-            int f = rng.RangeInclusive(prof.minFloors, Mathf.Max(prof.minFloors, prof.maxFloors));
-            float fh = cfg.floorHeight;
-            float w = b.Footprint.width, d = b.Footprint.height;
+            if (b.Type == BuildingType.EmptyLot)
+            {
+                b.Floors = 0; b.Height = b.TotalHeight = 0.2f;
+                return;
+            }
 
+            b.Style = FacadeCatalog.Pick(b.Type, b.District.Type, rng);
+            b.GroundHeight = b.Style.GroundHeight;
+            b.FloorHeight = b.Style.FloorHeight;
+            b.CorniceColor = rng.Pick(b.Style.Cornices);
+            b.HasSign = b.Style.Shop && rng.Chance(0.75f);
+
+            int f = rng.RangeInclusive(prof.minFloors, Mathf.Max(prof.minFloors, prof.maxFloors));
+            float w = b.Footprint.width, d = b.Footprint.height;
             switch (b.Type)
             {
-                case BuildingType.EmptyLot:
-                    b.Floors = 0; b.FloorHeight = fh; b.Height = 0.25f;
-                    return;
-                case BuildingType.Brownstone:
-                    f = Mathf.Clamp(f, 3, 4); b.BaseRaise = 1.2f;
-                    break;
-                case BuildingType.Shopfront:
-                    f = Mathf.Clamp(f, 2, 5);
-                    break;
-                case BuildingType.Tenement:
-                    f = Mathf.Clamp(f, 3, 7);
-                    b.HasFireEscape = rng.Chance(0.75f);
-                    break;
-                case BuildingType.Warehouse:
-                    f = Mathf.Clamp(f, 2, 6); fh = 4.2f;
-                    break;
-                case BuildingType.Factory:
-                    f = Mathf.Clamp(f, 2, 4); fh = 4.6f;
-                    b.HasChimney = true;
-                    break;
+                case BuildingType.Brownstone: f = Mathf.Clamp(f, 3, 4); break;
+                case BuildingType.Shopfront: f = Mathf.Clamp(f, 2, 5); break;
+                case BuildingType.Tenement: f = Mathf.Clamp(f, 3, 7); b.HasFireEscape = rng.Chance(0.8f); break;
+                case BuildingType.Warehouse: f = Mathf.Clamp(f, 2, 6); break;
+                case BuildingType.Factory: f = Mathf.Clamp(f, 2, 4); b.HasChimney = rng.Chance(0.7f); break;
                 case BuildingType.Office:
                     f = Mathf.Max(f, 6);
                     if (f >= 12 && w >= 10f && d >= 9f) b.TowerFloors = Mathf.RoundToInt(f * rng.Range(0.3f, 0.5f));
                     break;
             }
 
-            b.Floors = f;
-            b.FloorHeight = fh;
-            b.Height = b.BaseRaise + f * fh;
+            // Brownstones: "ground" is the half-sunk basement, all listed floors are above it.
+            b.UpperFloors = b.Type == BuildingType.Brownstone ? f : f - 1;
+            b.Floors = b.Type == BuildingType.Brownstone ? f + 1 : f;
+            b.Height = b.GroundHeight + (b.UpperFloors - b.TowerFloors) * b.FloorHeight;
+            b.TotalHeight = b.GroundHeight + b.UpperFloors * b.FloorHeight;
 
             bool flatRoofHousing = b.Type == BuildingType.Tenement || b.Type == BuildingType.Shopfront || b.Type == BuildingType.Office || b.Type == BuildingType.Warehouse;
             b.HasWaterTower = flatRoofHousing && w >= 5f && d >= 6f && rng.Chance(prof.waterTowerChance);
-            b.HasBulkhead = b.Type != BuildingType.Factory && rng.Chance(0.45f);
+            b.HasBulkhead = b.Type != BuildingType.Factory && rng.Chance(0.5f);
+
+            var dt = b.District.Type;
+            bool adDistrict = dt == DistrictType.Bowery || dt == DistrictType.Tenements || dt == DistrictType.Docks || dt == DistrictType.Industrial;
+            b.HasBillboard = adDistrict && !b.HasWaterTower && w >= 7f && rng.Chance(0.06f);
         }
 
         // ====================================================================
-        // VISUALS
+        // GROUND
         // ====================================================================
 
-        static Material M(Color c) => MaterialLibrary.Get(c);
+        static Material S(string name) => MaterialLibrary.Surface(name);
 
         void BuildGround()
         {
             float W = city.Width, D = city.Depth, sw = cfg.sidewalkWidth;
             var mb = new MeshBuilder();
-            Material asphalt = M(Palette.Asphalt), sidewalk = M(Palette.Sidewalk), yard = M(Palette.Yard);
+            Material asphalt = S("asphalt"), sidewalk = S("sidewalk"), curb = S("curb"), yard = S("dirt");
+            Material quay = S("wall_stone_lime"), cobbles = S("cobbles");
 
-            // City slab (its sides become the quay walls).
-            mb.AddBoxXZ(0f, W, -3f, 0f, 0f, D, asphalt);
+            // City slab: asphalt top, granite quay walls.
+            mb.AddBoxXZ(0f, W, -3f, 0f, 0f, D, asphalt, tile: 8f, side: quay);
 
-            // Land beyond the edges that are not waterfront, plus the north outskirts.
-            Material outskirts = M(Palette.Outskirts);
+            // Land beyond the edges that are not waterfront.
+            Material outskirts = S("dirt");
             float ww = cfg.waterWidth;
-            if (!cfg.waterfrontWest) mb.AddBoxXZ(-ww, 0f, -3f, -0.02f, cfg.waterfrontSouth ? 0f : -ww, D + ww, outskirts);
-            if (!cfg.waterfrontEast) mb.AddBoxXZ(W, W + ww, -3f, -0.02f, cfg.waterfrontSouth ? 0f : -ww, D + ww, outskirts);
-            if (!cfg.waterfrontSouth) mb.AddBoxXZ(0f, W, -3f, -0.02f, -ww, 0f, outskirts);
-            mb.AddBoxXZ(0f, W, -3f, -0.02f, D, D + ww, outskirts);
+            if (!cfg.waterfrontWest) mb.AddBoxXZ(-ww, 0f, -3f, -0.02f, cfg.waterfrontSouth ? 0f : -ww, D + ww, outskirts, tile: 8f);
+            if (!cfg.waterfrontEast) mb.AddBoxXZ(W, W + ww, -3f, -0.02f, cfg.waterfrontSouth ? 0f : -ww, D + ww, outskirts, tile: 8f);
+            if (!cfg.waterfrontSouth) mb.AddBoxXZ(0f, W, -3f, -0.02f, -ww, 0f, outskirts, tile: 8f);
+            mb.AddBoxXZ(0f, W, -3f, -0.02f, D, D + ww, outskirts, tile: 8f);
 
-            // River / harbour.
-            mb.AddBoxXZ(-ww, W + ww, -8f, -1.2f, -ww, D + ww, M(Palette.Water));
+            // Cobbled streets around the waterfront and industrial blocks.
+            float hs = cfg.streetWidth * 0.5f, ha = cfg.avenueWidth * 0.5f;
+            foreach (var block in city.Blocks)
+            {
+                var t = block.District.Type;
+                if (t != DistrictType.Docks && t != DistrictType.Industrial) continue;
+                Rect r = block.Rect;
+                float y = 0.012f;
+                Rect o = new Rect(r.xMin - ha, r.yMin - hs, r.width + 2 * ha, r.height + 2 * hs);
+                mb.AddBoxXZ(o.xMin, o.xMax, 0f, y, o.yMin, r.yMin, cobbles, tile: 4f);
+                mb.AddBoxXZ(o.xMin, o.xMax, 0f, y, r.yMax, o.yMax, cobbles, tile: 4f);
+                mb.AddBoxXZ(o.xMin, r.xMin, 0f, y, r.yMin, r.yMax, cobbles, tile: 4f);
+                mb.AddBoxXZ(r.xMax, o.xMax, 0f, y, r.yMin, r.yMax, cobbles, tile: 4f);
+            }
 
             foreach (var block in city.Blocks)
             {
                 Rect r = block.Rect;
-                // Sidewalk ring.
-                mb.AddBoxXZ(r.xMin, r.xMax, 0f, 0.18f, r.yMin, r.yMin + sw, sidewalk);
-                mb.AddBoxXZ(r.xMin, r.xMax, 0f, 0.18f, r.yMax - sw, r.yMax, sidewalk);
-                mb.AddBoxXZ(r.xMin, r.xMin + sw, 0f, 0.18f, r.yMin + sw, r.yMax - sw, sidewalk);
-                mb.AddBoxXZ(r.xMax - sw, r.xMax, 0f, 0.18f, r.yMin + sw, r.yMax - sw, sidewalk);
+                const float h = 0.18f;
+                mb.AddBoxXZ(r.xMin, r.xMax, 0f, h, r.yMin, r.yMin + sw, sidewalk, tile: 6f, side: curb);
+                mb.AddBoxXZ(r.xMin, r.xMax, 0f, h, r.yMax - sw, r.yMax, sidewalk, tile: 6f, side: curb);
+                mb.AddBoxXZ(r.xMin, r.xMin + sw, 0f, h, r.yMin + sw, r.yMax - sw, sidewalk, tile: 6f, side: curb);
+                mb.AddBoxXZ(r.xMax - sw, r.xMax, 0f, h, r.yMin + sw, r.yMax - sw, sidewalk, tile: 6f, side: curb);
 
                 if (block.IsPark) BuildPark(mb, block);
-                else mb.AddBoxXZ(r.xMin + sw, r.xMax - sw, 0f, 0.1f, r.yMin + sw, r.yMax - sw, yard);
+                else mb.AddBoxXZ(r.xMin + sw, r.xMax - sw, 0f, 0.1f, r.yMin + sw, r.yMax - sw, yard, tile: 6f);
             }
 
+            BuildTrolleyTracks(mb);
             BuildPiers(mb);
             BuildElevatedRailways(mb);
-
             mb.Spawn("Ground", root);
+
+            // Water: separate object so its material can scroll.
+            var wm = new MeshBuilder();
+            waterMat = new Material(S("water")) { name = "Water (runtime)" };
+            wm.AddQuad(new Vector3(-ww, -1.2f, -ww), new Vector3(-ww, -1.2f, D + ww), new Vector3(W + ww, -1.2f, D + ww),
+                new Vector3(W + ww, -1.2f, -ww), Vector3.up, waterMat, 14f);
+            wm.Spawn("Water", root, false);
         }
 
         void BuildPark(MeshBuilder mb, BlockInfo block)
@@ -425,64 +478,143 @@ namespace Mobland.City
             float sw = cfg.sidewalkWidth;
             Rect r = block.Rect;
             Rect inner = new Rect(r.xMin + sw, r.yMin + sw, r.width - 2f * sw, r.height - 2f * sw);
-            mb.AddBoxXZ(inner.xMin, inner.xMax, 0f, 0.16f, inner.yMin, inner.yMax, M(Palette.Grass));
+            mb.AddBoxXZ(inner.xMin, inner.xMax, 0f, 0.16f, inner.yMin, inner.yMax, S("grass"), tile: 8f);
 
-            // Crossing paths.
-            Material path = M(Palette.Sidewalk);
+            Material path = S("sidewalk");
             float cx = inner.center.x, cz = inner.center.y;
-            mb.AddBoxXZ(inner.xMin, inner.xMax, 0f, 0.17f, cz - 1.2f, cz + 1.2f, path);
-            mb.AddBoxXZ(cx - 1.2f, cx + 1.2f, 0f, 0.17f, inner.yMin, inner.yMax, path);
+            mb.AddBoxXZ(inner.xMin, inner.xMax, 0f, 0.17f, cz - 1.3f, cz + 1.3f, path, tile: 6f);
+            mb.AddBoxXZ(cx - 1.3f, cx + 1.3f, 0f, 0.17f, inner.yMin, inner.yMax, path, tile: 6f);
+            // central fountain / monument
+            mb.AddCylinder(new Vector3(cx, 0.17f, cz), 3.2f, 0.5f, 16, S("wall_stone_lime"), true, 2f);
+            mb.AddCylinder(new Vector3(cx, 0.17f, cz), 2.8f, 0.52f, 16, S("water"), true, 4f);
+            mb.AddCylinder(new Vector3(cx, 0.6f, cz), 0.5f, 2.6f, 8, S("wall_stone_lime"), true, 2f);
+            mb.AddSphere(new Vector3(cx, 3.4f, cz), new Vector3(0.6f, 0.8f, 0.6f), 8, 5, MaterialLibrary.Get(new Color(0.22f, 0.33f, 0.28f), 0.5f, 0.7f));
 
-            // Trees.
-            Material trunk = M(Palette.TreeTrunk), leaves = M(Palette.TreeLeaves);
-            int trees = Mathf.RoundToInt(inner.width * inner.height / 55f);
+            // iron railing around the park
+            Material iron = MaterialLibrary.Get(Palette.CastIron, 0.3f, 0.5f);
+            float y = 0.17f;
+            void Rail(Vector3 a, Vector3 b)
+            {
+                mb.AddBeam(a + Vector3.up * (y + 0.9f), b + Vector3.up * (y + 0.9f), 0.05f, iron);
+                float len = Vector3.Distance(a, b);
+                for (float t = 0; t <= len; t += 2.5f)
+                {
+                    Vector3 p = Vector3.Lerp(a, b, t / len);
+                    mb.AddBeam(p + Vector3.up * y, p + Vector3.up * (y + 1.0f), 0.06f, iron);
+                }
+            }
+            Rail(new Vector3(inner.xMin, 0, inner.yMin), new Vector3(cx - 1.4f, 0, inner.yMin));
+            Rail(new Vector3(cx + 1.4f, 0, inner.yMin), new Vector3(inner.xMax, 0, inner.yMin));
+            Rail(new Vector3(inner.xMin, 0, inner.yMax), new Vector3(cx - 1.4f, 0, inner.yMax));
+            Rail(new Vector3(cx + 1.4f, 0, inner.yMax), new Vector3(inner.xMax, 0, inner.yMax));
+            Rail(new Vector3(inner.xMin, 0, inner.yMin), new Vector3(inner.xMin, 0, cz - 1.4f));
+            Rail(new Vector3(inner.xMin, 0, cz + 1.4f), new Vector3(inner.xMin, 0, inner.yMax));
+            Rail(new Vector3(inner.xMax, 0, inner.yMin), new Vector3(inner.xMax, 0, cz - 1.4f));
+            Rail(new Vector3(inner.xMax, 0, cz + 1.4f), new Vector3(inner.xMax, 0, inner.yMax));
+
+            // trees and benches
+            int trees = Mathf.RoundToInt(inner.width * inner.height / 70f);
             for (int i = 0; i < trees; i++)
             {
-                float x = rng.Range(inner.xMin + 1.5f, inner.xMax - 1.5f);
-                float z = rng.Range(inner.yMin + 1.5f, inner.yMax - 1.5f);
-                if (Mathf.Abs(x - cx) < 2.6f || Mathf.Abs(z - cz) < 2.6f) continue;
-                float s = rng.Range(0.8f, 1.3f);
-                var p = new Vector3(x, 0.16f, z);
-                mb.AddCylinder(p, 0.18f * s, 1.8f * s, 5, trunk, false);
-                mb.AddCone(p + Vector3.up * 1.4f * s, 1.7f * s, 3.6f * s, 7, leaves);
+                float x = rng.Range(inner.xMin + 2f, inner.xMax - 2f);
+                float z = rng.Range(inner.yMin + 2f, inner.yMax - 2f);
+                if (Mathf.Abs(x - cx) < 3.5f || Mathf.Abs(z - cz) < 3.5f) continue;
+                StreetDresser.Tree(mb, new Vector3(x, 0.16f, z), rng.Range(0.9f, 1.4f), rng);
+            }
+            Material wood = MaterialLibrary.Get(new Color(0.3f, 0.22f, 0.14f), 0.2f);
+            for (int i = 0; i < 6; i++)
+            {
+                bool alongX = rng.Chance(0.5f);
+                float x = alongX ? rng.Range(inner.xMin + 3f, inner.xMax - 3f) : cx + (rng.Chance(0.5f) ? 2.2f : -2.2f);
+                float z = alongX ? cz + (rng.Chance(0.5f) ? 2.2f : -2.2f) : rng.Range(inner.yMin + 3f, inner.yMax - 3f);
+                mb.AddOrientedBox(new Vector3(x, 0.17f, z), new Vector3(1.8f, 0.45f, 0.5f), alongX ? 0f : 90f, wood, iron);
+            }
+        }
+
+        void BuildTrolleyTracks(MeshBuilder mb)
+        {
+            Material rail = MaterialLibrary.Get(Palette.Rail, 0.6f, 0.8f);
+            Material bed = S("cobbles");
+            foreach (int a in trolleyAvenues)
+            {
+                float ax = city.AvenueCenters[a];
+                mb.AddBoxXZ(ax - 3.4f, ax + 3.4f, 0f, 0.015f, 0f, city.Depth, bed, tile: 4f);
+                foreach (float track in new[] { -1.8f, 1.8f })
+                    foreach (float g in new[] { -0.72f, 0.72f })
+                    {
+                        float x = ax + track + g;
+                        mb.AddBoxXZ(x - 0.04f, x + 0.04f, 0f, 0.045f, 0f, city.Depth, rail);
+                    }
             }
         }
 
         void BuildPiers(MeshBuilder mb)
         {
-            Material wood = M(Palette.PierWood), shed = M(Palette.PierShed), roof = M(Palette.Roof);
-            Material hull = M(Palette.BoatHull), cabin = M(Palette.BoatCabin);
+            Material wood = S("planks"), shedWall = S("wall_brick_soot"), roof = S("roof_tar"), pile = S("planks");
+            Material hull = MaterialLibrary.Get(Palette.BoatHull, 0.4f), cabin = MaterialLibrary.Get(Palette.BoatCabin, 0.3f);
+            Material funnel = MaterialLibrary.Get(new Color(0.55f, 0.15f, 0.1f), 0.3f), black = MaterialLibrary.Get(new Color(0.05f, 0.05f, 0.05f), 0.3f);
             int bx = cfg.blocksX;
 
             void Pier(BlockInfo block, bool west)
             {
                 if (block.District.Type != DistrictType.Docks) return;
                 float zc = block.Rect.center.y;
-                float width = rng.Range(9f, 13f);
+                float width = rng.Range(10f, 14f);
                 float len = cfg.pierLength * rng.Range(0.8f, 1.15f);
                 float x0 = west ? -len : city.Width;
                 float x1 = west ? 0f : city.Width + len;
-                mb.AddBoxXZ(x0, x1, -1.6f, 0.05f, zc - width * 0.5f, zc + width * 0.5f, wood);
+                mb.AddBoxXZ(x0, x1, -0.3f, 0.05f, zc - width * 0.5f, zc + width * 0.5f, wood, tile: 4f);
+                for (float x = Mathf.Min(x0, x1) + 1f; x < Mathf.Max(x0, x1); x += 3f)
+                    foreach (float side in new[] { -1f, 1f })
+                        mb.AddCylinder(new Vector3(x, -2.5f, zc + side * (width * 0.5f - 0.3f)), 0.22f, 2.5f, 6, pile, false, 2f);
 
-                if (rng.Chance(0.65f))
+                if (rng.Chance(0.7f))
                 {
                     float i0 = Mathf.Min(x0, x1) + 2f, i1 = Mathf.Max(x0, x1) - 2f;
-                    float h = rng.Range(4.5f, 6.5f);
-                    mb.AddBoxXZ(i0, i1, 0.05f, h, zc - width * 0.5f + 1.5f, zc + width * 0.5f - 1.5f, shed);
-                    mb.AddBoxXZ(i0 + 0.3f, i1 - 0.3f, h, h + 0.12f, zc - width * 0.5f + 1.8f, zc + width * 0.5f - 1.8f, roof);
+                    float h = rng.Range(5f, 7f);
+                    float s0 = zc - width * 0.5f + 1.5f, s1 = zc + width * 0.5f - 1.5f;
+                    mb.AddBoxXZ(i0, i1, 0.05f, h, s0, s1, roof, side: shedWall, tile: 2f);
+                    // pitched roof
+                    float mid = (s0 + s1) / 2;
+                    Vector3 a = new Vector3(i0, h, s0), b = new Vector3(i1, h, s0), c = new Vector3(i1, h + 1.6f, mid), d = new Vector3(i0, h + 1.6f, mid);
+                    mb.AddQuad(a, b, c, d, new Vector3(0, 1, -1).normalized, roof, 6f);
+                    Vector3 a2 = new Vector3(i0, h, s1), b2 = new Vector3(i1, h, s1);
+                    mb.AddQuad(a2, d, c, b2, new Vector3(0, 1, 1).normalized, roof, 6f);
+                    mb.AddTriangle(a, d, a2, Vector3.left, shedWall, 2f);
+                    mb.AddTriangle(b, c, b2, Vector3.right, shedWall, 2f);
                 }
 
-                if (rng.Chance(0.45f))
+                if (rng.Chance(0.5f))
                 {
-                    // A freighter moored alongside.
+                    // freighter moored alongside
                     float side = rng.Chance(0.5f) ? 1f : -1f;
+                    float bw = rng.Range(6f, 8f);
                     float bz0 = zc + side * (width * 0.5f + 1f);
-                    float bz1 = bz0 + side * rng.Range(5f, 7f);
-                    float bl = Mathf.Min(len - 4f, rng.Range(18f, 30f));
-                    float bxStart = west ? -len + 2f : city.Width + len - 2f - bl;
-                    mb.AddBoxXZ(bxStart, bxStart + bl, -1.8f, 0.6f, bz0, bz1, hull, false);
-                    float cMid = bxStart + bl * 0.65f;
-                    mb.AddBoxXZ(cMid - 2.5f, cMid + 2.5f, 0.6f, 3.0f, Mathf.Min(bz0, bz1) + 0.8f, Mathf.Max(bz0, bz1) - 0.8f, cabin);
+                    float bz1 = bz0 + side * bw;
+                    float zmin = Mathf.Min(bz0, bz1), zmax = Mathf.Max(bz0, bz1);
+                    float bl = Mathf.Min(len - 4f, rng.Range(22f, 34f));
+                    float bxs = west ? -len + 2f : city.Width + len - 2f - bl;
+                    float bowX = west ? bxs : bxs + bl;
+                    float sternX = west ? bxs + bl : bxs;
+                    float dir = west ? 1f : -1f; // from bow towards stern
+                    float bodyStart = bowX + dir * 4f;
+                    mb.AddBoxXZ(Mathf.Min(bodyStart, sternX), Mathf.Max(bodyStart, sternX), -2f, 1.2f, zmin, zmax, hull);
+                    // pointed bow
+                    Vector3 tip = new Vector3(bowX, 1.2f, (zmin + zmax) / 2), tipLow = new Vector3(bowX + dir * 1f, -2f, (zmin + zmax) / 2);
+                    Vector3 l = new Vector3(bodyStart, 1.2f, zmin), rr = new Vector3(bodyStart, 1.2f, zmax);
+                    Vector3 lL = new Vector3(bodyStart, -2f, zmin), rL = new Vector3(bodyStart, -2f, zmax);
+                    mb.AddQuad(lL, l, tip, tipLow, new Vector3(-dir, 0, -1).normalized, hull);
+                    mb.AddQuad(rL, rr, tip, tipLow, new Vector3(-dir, 0, 1).normalized, hull);
+                    mb.AddTriangle(l, tip, rr, Vector3.up, MaterialLibrary.Get(new Color(0.3f, 0.25f, 0.2f), 0.2f));
+                    // superstructure + funnel
+                    float cMid = bxs + bl * (west ? 0.65f : 0.35f);
+                    mb.AddBoxXZ(cMid - 3f, cMid + 3f, 1.2f, 4.2f, zmin + 1f, zmax - 1f, cabin);
+                    mb.AddBoxXZ(cMid - 2f, cMid + 2f, 4.2f, 5.6f, zmin + 1.5f, zmax - 1.5f, cabin);
+                    mb.AddCylinder(new Vector3(cMid + dir * 0.5f, 5.6f, (zmin + zmax) / 2), 0.8f, 3.2f, 10, funnel, true);
+                    mb.AddCylinder(new Vector3(cMid + dir * 0.5f, 8.2f, (zmin + zmax) / 2), 0.82f, 0.6f, 10, black, true);
+                    // cargo hatches + mast
+                    mb.AddBoxXZ(bodyStart + dir * 2f - 2f, bodyStart + dir * 2f + 2f, 1.2f, 1.7f, zmin + 1.5f, zmax - 1.5f, S("planks"), tile: 2f);
+                    mb.AddBeam(new Vector3(bodyStart + dir * 5f, 1.2f, (zmin + zmax) / 2), new Vector3(bodyStart + dir * 5f, 11f, (zmin + zmax) / 2), 0.25f, black);
                 }
             }
 
@@ -495,30 +627,36 @@ namespace Mobland.City
 
         void BuildElevatedRailways(MeshBuilder mb)
         {
-            int bx = cfg.blocksX;
-            if (cfg.elevatedRailways <= 0 || bx < 2) return;
-
-            var interior = new List<int>();
-            for (int i = 1; i < bx; i++) interior.Add(i);
-            rng.Shuffle(interior);
-
-            Material steel = M(Palette.Steel), ties = M(Palette.PierWood);
+            Material steel = S("steel"), ties = S("planks");
+            Material rail = MaterialLibrary.Get(Palette.Rail, 0.6f, 0.8f);
             float h = cfg.elevatedHeight, D = city.Depth;
-            for (int k = 0; k < Mathf.Min(cfg.elevatedRailways, interior.Count); k++)
+            foreach (int a in elAvenues)
             {
-                float ax = city.AvenueCenters[interior[k]];
-                mb.AddBoxXZ(ax - 4f, ax + 4f, h, h + 0.5f, 0f, D, steel, true);            // deck
-                mb.AddBoxXZ(ax - 4f, ax - 3.6f, h + 0.5f, h + 1.4f, 0f, D, steel);         // girders
-                mb.AddBoxXZ(ax + 3.6f, ax + 4f, h + 0.5f, h + 1.4f, 0f, D, steel);
-                mb.AddBoxXZ(ax - 2.6f, ax - 0.6f, h + 0.5f, h + 0.6f, 0f, D, ties);        // track beds
-                mb.AddBoxXZ(ax + 0.6f, ax + 2.6f, h + 0.5f, h + 0.6f, 0f, D, ties);
-                for (float z = 6f; z < D; z += 14f)
+                float ax = city.AvenueCenters[a];
+                mb.AddBoxXZ(ax - 4.2f, ax + 4.2f, h, h + 0.35f, 0f, D, steel, true, 2f);       // deck
+                mb.AddBoxXZ(ax - 4.2f, ax - 3.8f, h - 0.9f, h + 1.3f, 0f, D, steel, true, 2f);  // side girders
+                mb.AddBoxXZ(ax + 3.8f, ax + 4.2f, h - 0.9f, h + 1.3f, 0f, D, steel, true, 2f);
+                mb.AddBoxXZ(ax - 1.2f, ax + 1.2f, h - 0.7f, h, 0f, D, steel, true, 2f);         // centre girder
+                foreach (float track in new[] { -1.9f, 1.9f })
                 {
-                    mb.AddBoxXZ(ax - 3.6f, ax - 3.1f, 0f, h, z - 0.25f, z + 0.25f, steel);
-                    mb.AddBoxXZ(ax + 3.1f, ax + 3.6f, 0f, h, z - 0.25f, z + 0.25f, steel);
+                    mb.AddBoxXZ(ax + track - 1.1f, ax + track + 1.1f, h + 0.35f, h + 0.5f, 0f, D, ties, tile: 2f);
+                    foreach (float g in new[] { -0.72f, 0.72f })
+                        mb.AddBoxXZ(ax + track + g - 0.05f, ax + track + g + 0.05f, h + 0.5f, h + 0.62f, 0f, D, rail);
+                }
+                for (float z = 6f; z < D; z += 13f)
+                {
+                    foreach (float side in new[] { -3.4f, 3.4f })
+                    {
+                        mb.AddBoxXZ(ax + side - 0.3f, ax + side + 0.3f, 0f, h, z - 0.3f, z + 0.3f, steel, tile: 2f);
+                        mb.AddBoxXZ(ax + side - 0.5f, ax + side + 0.5f, 0f, 0.5f, z - 0.5f, z + 0.5f, S("concrete"), tile: 2f);
+                        mb.AddBeam(new Vector3(ax + side, h - 2.4f, z), new Vector3(ax + side * 0.25f, h - 0.7f, z), 0.25f, steel);
+                    }
+                    mb.AddBoxXZ(ax - 3.8f, ax + 3.8f, h - 0.9f, h, z - 0.25f, z + 0.25f, steel, true, 2f);  // cross girder
                 }
             }
         }
+
+        readonly Dictionary<DistrictInfo, Material> overlayMats = new Dictionary<DistrictInfo, Material>();
 
         GameObject BuildDistrictOverlay()
         {
@@ -527,19 +665,22 @@ namespace Mobland.City
             foreach (var block in city.Blocks)
             {
                 Rect r = block.Rect;
-                Material m = M(block.District.MapColor);
-                float y0 = 0.19f, y1 = 0.24f;
+                if (!overlayMats.TryGetValue(block.District, out var m))
+                {
+                    m = new Material(MaterialLibrary.Template()) { name = "Overlay " + block.District.Name };
+                    MaterialLibrary.SetColor(m, block.District.MapColor);
+                    m.EnableKeyword("_EMISSION");
+                    m.SetColor("_EmissionColor", block.District.MapColor * 1.5f);
+                    overlayMats[block.District] = m;
+                }
+                float y0 = 0.19f, y1 = 0.26f;
                 mb.AddBoxXZ(r.xMin, r.xMax, y0, y1, r.yMin, r.yMin + sw, m);
                 mb.AddBoxXZ(r.xMin, r.xMax, y0, y1, r.yMax - sw, r.yMax, m);
                 mb.AddBoxXZ(r.xMin, r.xMin + sw, y0, y1, r.yMin + sw, r.yMax - sw, m);
                 mb.AddBoxXZ(r.xMax - sw, r.xMax, y0, y1, r.yMin + sw, r.yMax - sw, m);
             }
-            var go = mb.Spawn("District Overlay", root);
-            if (go != null)
-            {
-                go.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                go.SetActive(false);
-            }
+            var go = mb.Spawn("District Overlay", root, false);
+            if (go != null) go.SetActive(false);
             return go;
         }
 
@@ -563,7 +704,7 @@ namespace Mobland.City
                 if (go == null) continue;
 
                 var col = go.AddComponent<BoxCollider>();
-                float h = Mathf.Max(0.3f, b.Height);
+                float h = Mathf.Max(0.3f, b.TotalHeight);
                 col.center = new Vector3(0f, h * 0.5f, 0f);
                 col.size = new Vector3(b.Footprint.width, h, b.Footprint.height);
 
