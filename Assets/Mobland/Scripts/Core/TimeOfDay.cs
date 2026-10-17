@@ -143,25 +143,25 @@ namespace Mobland.Core
             float t = (hour - 6f) / 13f;                 // 0 sunrise .. 1 sunset
             float sunSin = Mathf.Sin(t * Mathf.PI);      // >0 when above horizon
             if (t < 0f || t > 1f) sunSin = -Mathf.Abs(Mathf.Sin(t * Mathf.PI)) * 0.6f - 0.05f;
-            float elev = Mathf.Max(sunSin, 0f) * 55f;
+            float elev = Mathf.Max(sunSin, 0f) * 58f;
             float yaw = Mathf.Lerp(-100f, 100f, Mathf.Clamp01(t));
 
             Daylight = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.06f, 0.2f, sunSin));
-            Night = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.1f, 0.12f, sunSin));
+            Night = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.04f, 0.32f, sunSin));
             float golden = Mathf.Clamp01(1f - Mathf.Abs(sunSin - 0.12f) / 0.2f) * Daylight;   // warm low-sun boost
 
-            Quaternion sunRot = Quaternion.Euler(Mathf.Max(elev, 4f), yaw, 0f);
+            Quaternion sunRot = Quaternion.Euler(Mathf.Max(elev, 12f), yaw, 0f);
             Quaternion moonRot = Quaternion.Euler(38f, 160f, 0f);
             Sun.transform.rotation = Quaternion.Slerp(moonRot, sunRot, Daylight);
 
             Color sunCol = elev < 18f ? Color.Lerp(SunLow, SunMid, elev / 18f) : Color.Lerp(SunMid, SunHigh, (elev - 18f) / 37f);
             Sun.color = Color.Lerp(MoonColor, sunCol, Daylight);
-            Sun.intensity = Mathf.Lerp(0.22f, 1.25f + 0.5f * Mathf.Clamp01(elev / 40f), Daylight);
+            Sun.intensity = Mathf.Lerp(0.32f, 1.35f + 0.45f * Mathf.Clamp01(elev / 40f), Daylight);
             Sun.shadowStrength = Mathf.Lerp(0.6f, 0.85f, Daylight);
 
             // Ambient light.
-            Color skyDay = Hex("#7f8ea3"), skyDusk = Hex("#8a6f6a"), skyNight = Hex("#1a2234");
-            Color eqDay = Hex("#7c7468"), eqDusk = Hex("#6e4f40"), eqNight = Hex("#151820");
+            Color skyDay = Hex("#7f8ea3"), skyDusk = Hex("#9a7c74"), skyNight = Hex("#2a3550");
+            Color eqDay = Hex("#7c7468"), eqDusk = Hex("#7e5c4a"), eqNight = Hex("#1f2330");
             Color grDay = Hex("#3b352e"), grNight = Hex("#0b0c10");
             Color skyC = Color.Lerp(Color.Lerp(skyNight, skyDay, Daylight), skyDusk, golden * 0.6f);
             RenderSettings.ambientSkyColor = skyC;

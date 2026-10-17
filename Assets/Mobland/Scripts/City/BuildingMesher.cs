@@ -12,6 +12,14 @@ namespace Mobland.City
     public static class BuildingMesher
     {
         static Material C(Color c, float smooth = 0.2f, float metal = 0f) => MaterialLibrary.Get(c, smooth, metal);
+
+        static readonly Color[] RoofTints =
+        {
+            new Color(1f, 1f, 1f), new Color(0.82f, 0.8f, 0.78f), new Color(1.15f, 1.12f, 1.05f),
+            new Color(0.95f, 0.85f, 0.75f), new Color(0.7f, 0.7f, 0.72f), new Color(1.25f, 1.2f, 1.1f),
+        };
+
+        static Material skylightMat;
         static Material S(string name) => MaterialLibrary.Surface(name);
 
         /// <summary>World positions where smoke should rise (factory chimneys). Filled during generation.</summary>
@@ -81,7 +89,8 @@ namespace Mobland.City
             int front = b.FacesNorth ? North : South, back = b.FacesNorth ? South : North;
 
             Material upper = st.UpperMat, ground = st.GroundMat, wall = st.WallMat;
-            Material roof = S("roof_tar"), coping = S("concrete");
+            Material roof = MaterialLibrary.Tinted("roof_tar", RoofTints[rng.Range(0, RoofTints.Length)]);
+            Material coping = st.Wall.StartsWith("wall_brick") ? wall : S("concrete");
             Material cornice = C(b.CorniceColor, 0.3f, 0.2f);
             Material stone = C(Palette.Stone, 0.15f);
 
@@ -157,6 +166,8 @@ namespace Mobland.City
                 }
             }
 
+            if (b.TowerFloors == 0) RoofExtras(mb, b, roofY, rng, roof);
+
             if (b.HasWaterTower && b.TowerFloors == 0)
             {
                 float wx = rng.Range(x0 + 2f, Mathf.Max(x0 + 2f, x1 - 2f));
@@ -176,6 +187,53 @@ namespace Mobland.City
             }
 
             if (b.HasBillboard && b.TowerFloors == 0) Billboard(mb, b, ff, roofY);
+        }
+
+        static void RoofExtras(MeshBuilder mb, BuildingInfo b, float y, SeededRandom rng, Material roof)
+        {
+            Rect r = b.Footprint;
+            if (r.width < 4f || r.height < 5f) return;
+            if (skylightMat == null) skylightMat = MaterialLibrary.Glow(new Color(0.18f, 0.2f, 0.2f), new Color(1f, 0.78f, 0.5f), 1.6f);
+            Material metal = C(new Color(0.32f, 0.33f, 0.33f), 0.35f, 0.6f);
+            Material wood = C(new Color(0.38f, 0.3f, 0.22f), 0.1f);
+            float X() => rng.Range(r.xMin + 1.2f, r.xMax - 1.2f);
+            float Z() => rng.Range(r.yMin + 1.2f, r.yMax - 1.2f);
+
+            // skylights (glow at night)
+            int sky = b.Type == BuildingType.Warehouse || b.Type == BuildingType.Factory ? rng.RangeInclusive(2, 5) : rng.Range(0, 2);
+            for (int i = 0; i < sky; i++)
+            {
+                float x = X(), z = Z();
+                float w = b.Type == BuildingType.Factory ? 1.4f : 0.7f, l = b.Type == BuildingType.Factory ? 4f : 1f;
+                mb.AddBoxXZ(x - w, x + w, y, y + 0.35f, z - l, z + l, skylightMat, side: metal);
+            }
+            // vents
+            int vents = rng.RangeInclusive(1, 4);
+            for (int i = 0; i < vents; i++)
+            {
+                Vector3 p = new Vector3(X(), y, Z());
+                mb.AddCylinder(p, 0.18f, rng.Range(0.5f, 1.2f), 6, metal, true);
+                if (rng.Chance(0.5f)) mb.AddCone(p + Vector3.up * 1.2f, 0.32f, 0.25f, 6, metal);
+            }
+            // roof hatch
+            if (rng.Chance(0.5f))
+            {
+                float x = X(), z = Z();
+                mb.AddBoxXZ(x - 0.5f, x + 0.5f, y, y + 0.4f, z - 0.6f, z + 0.6f, metal);
+            }
+            // pigeon coop / shed on tenements
+            if ((b.Type == BuildingType.Tenement || b.Type == BuildingType.Shopfront) && rng.Chance(0.12f))
+            {
+                float x = X(), z = Z();
+                mb.AddBoxXZ(x - 1.2f, x + 1.2f, y, y + 1.6f, z - 0.8f, z + 0.8f, roof, side: wood);
+            }
+            // tar patch (darker rectangle)
+            if (rng.Chance(0.6f))
+            {
+                float x = X(), z = Z(), w = rng.Range(1f, 3f), l = rng.Range(1f, 3f);
+                mb.AddQuad(new Vector3(x - w, y + 0.02f, z - l), new Vector3(x - w, y + 0.02f, z + l), new Vector3(x + w, y + 0.02f, z + l),
+                    new Vector3(x + w, y + 0.02f, z - l), Vector3.up, MaterialLibrary.Tinted("roof_tar", new Color(0.6f, 0.6f, 0.62f)), 6f);
+            }
         }
 
         static void Roof(MeshBuilder mb, float x0, float x1, float z0, float z1, float y, Material roof, Material coping, Material wall, float wallTile)

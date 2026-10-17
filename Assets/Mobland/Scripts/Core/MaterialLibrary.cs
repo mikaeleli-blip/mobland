@@ -53,6 +53,17 @@ namespace Mobland.Core
             return m;
         }
 
+        /// <summary>Textured surface multiplied by a tint (e.g. roof tar variations). Cached per name + tint.</summary>
+        public static Material Tinted(string name, Color tint)
+        {
+            string key = $"{name}#{ColorUtility.ToHtmlStringRGB(tint)}";
+            if (surfaces.TryGetValue(key, out var m) && m != null) return m;
+            m = new Material(Surface(name)) { name = key };
+            SetColor(m, tint);
+            surfaces[key] = m;
+            return m;
+        }
+
         /// <summary>Plain coloured lit material (cached by colour + smoothness + metallic).</summary>
         public static Material Get(Color color, float smoothness = 0.15f, float metallic = 0f)
         {

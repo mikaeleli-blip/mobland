@@ -64,7 +64,7 @@ def sidewalk(out, seed=321):
     joint = ((xx % slab) < 2) | ((yy % slab) < 2)
     sid = ((yy // slab) * 4 + (xx // slab)).astype(np.int64)
     tone = np.random.default_rng(seed).uniform(0.85, 1.1, 16)[sid]
-    base = rgb('#8e8b84')
+    base = rgb('#6f6c66')
     c.albedo = fill(H, W, base) * (tone * (0.82 + 0.28 * n + 0.1 * fine))[..., None]
     c.albedo[joint] *= 0.55
     stains = fbm(H, W, beta=2.3, lo=2, seed=seed + 4)
@@ -206,7 +206,7 @@ def concrete(out, seed=401):
     c = Canvas(H, W)
     n = fbm(H, W, beta=1.8, lo=1, seed=seed)
     fine = fbm(H, W, beta=0.3, lo=60, seed=seed + 1)
-    c.albedo = fill(H, W, rgb('#7e7a72')) * (0.8 + 0.3 * n + 0.1 * fine)[..., None]
+    c.albedo = fill(H, W, rgb('#625e58')) * (0.8 + 0.3 * n + 0.1 * fine)[..., None]
     c.height = 0.5 + 0.1 * fine
     c.smooth[:] = 0.2
     c.grime(0.3, 0.4, seed=seed + 2)

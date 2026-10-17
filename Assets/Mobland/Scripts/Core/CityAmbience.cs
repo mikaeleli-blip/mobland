@@ -11,9 +11,9 @@ namespace Mobland.Core
     /// </summary>
     public sealed class CityAmbience : MonoBehaviour
     {
-        public int maxLampLights = 120;
-        public float lampRange = 13f;
-        public float lampIntensity = 3.2f;
+        public int maxLampLights = 160;
+        public float lampRange = 17f;
+        public float lampIntensity = 24f;
 
         TimeOfDay time;
         CameraRig rig;

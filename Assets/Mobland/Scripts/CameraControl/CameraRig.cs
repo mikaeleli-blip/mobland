@@ -13,12 +13,12 @@ namespace Mobland.CameraControl
         public Camera Cam;
 
         [Header("Zoom")]
-        public float minDistance = 25f;
+        public float minDistance = 14f;
         public float maxDistance = 420f;
-        [Range(0.05f, 0.4f)] public float zoomStep = 0.15f;
+        [Range(0.05f, 0.4f)] public float zoomStep = 0.2f;
 
         [Header("Angle")]
-        public float minPitch = 32f;
+        public float minPitch = 28f;
         public float maxPitch = 68f;
         public float startYaw = 20f;
 
