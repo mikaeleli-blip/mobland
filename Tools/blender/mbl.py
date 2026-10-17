@@ -313,3 +313,17 @@ def render_preview(objs, path, size=(900, 560), cam_dist=None, target=(0, 0, 0.8
     scene.camera = co
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)
+
+
+def set_material(name, rgb, rough=0.5, metal=0.0, emit=0.0):
+    """Create/overwrite a preview material colour (used by characters, which pick colours per archetype)."""
+    m = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    m.use_nodes = True
+    bsdf = m.node_tree.nodes.get('Principled BSDF')
+    bsdf.inputs['Base Color'].default_value = (rgb[0], rgb[1], rgb[2], 1)
+    bsdf.inputs['Roughness'].default_value = rough
+    bsdf.inputs['Metallic'].default_value = metal
+    if emit > 0:
+        bsdf.inputs['Emission Color'].default_value = (rgb[0], rgb[1], rgb[2], 1)
+        bsdf.inputs['Emission Strength'].default_value = emit
+    return m
