@@ -228,7 +228,7 @@ namespace Mobland.EditorTools
         {
             var p = so.FindProperty(prop);
             if (p == null) { Debug.Log($"[Mobland] (setup) property not found: {prop}"); return; }
-            if (p.propertyType == SerializedPropertyType.Enum) p.enumValueIndex = v; else p.intValue = v;
+            p.intValue = v;   // for enums this sets the underlying value, not the list index
         }
 
         static void SetBool(SerializedObject so, string prop, bool v)
