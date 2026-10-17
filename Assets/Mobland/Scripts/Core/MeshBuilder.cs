@@ -131,6 +131,31 @@ namespace Mobland.Core
             if (bottom) AddQuad(c0, c1, c2, c3, Vector3.down, side, tile);
         }
 
+        /// <summary>
+        /// Append a Blender-exported model at <paramref name="pos"/>, rotated by <paramref name="yawDeg"/> around Y.
+        /// <paramref name="slotMaterial"/> maps the model's material slot names ("Paint", "Chrome", ...) to materials.
+        /// UVs are world-planar (for textured slots such as wood).
+        /// </summary>
+        public void AddModel(ModelData m, Vector3 pos, float yawDeg, System.Func<string, Material> slotMaterial, float uvTile = 2f, float scale = 1f)
+        {
+            if (m == null) return;
+            Quaternion q = Quaternion.Euler(0f, yawDeg, 0f);
+            int b = vertices.Count;
+            for (int i = 0; i < m.Positions.Length; i++)
+            {
+                Vector3 w = pos + q * (m.Positions[i] * scale);
+                Vector3 n = q * m.Normals[i];
+                vertices.Add(w - Origin);
+                normals.Add(n);
+                uvs.Add(PlanarUV(w, n, uvTile));
+            }
+            foreach (var (slot, idx) in m.Parts)
+            {
+                var t = Tris(slotMaterial(slot));
+                for (int i = 0; i < idx.Length; i++) t.Add(b + idx[i]);
+            }
+        }
+
         /// <summary>Square-section beam between two points (stairs, braces, rails).</summary>
         public void AddBeam(Vector3 from, Vector3 to, float thickness, Material m, float depth = -1f)
         {

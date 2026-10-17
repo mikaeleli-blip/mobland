@@ -196,72 +196,23 @@ namespace Mobland.City
 
         void ParkRow(MeshBuilder mb, float from, float to, float line, bool alongX, DistrictType dt, float yaw)
         {
-            float density = dt == DistrictType.Uptown || dt == DistrictType.FinancialDistrict ? 0.45f : 0.3f;
+            float density = dt == DistrictType.Uptown || dt == DistrictType.FinancialDistrict ? 0.38f : 0.26f;
             float t = from + rng.Range(0f, 6f);
-            while (t < to - 4f)
+            while (t < to - 6f)
             {
                 if (rng.Chance(density))
                 {
-                    Vector3 p = alongX ? new Vector3(t + 2f, 0f, line) : new Vector3(line, 0f, t + 2f);
+                    string model = VehicleKit.PickCar(rng, dt);
+                    float len = VehicleKit.Lengths.TryGetValue(model, out float l) ? l : 4f;
+                    float c = t + len * 0.5f;
+                    Vector3 p = alongX ? new Vector3(c, 0f, line) : new Vector3(line, 0f, c);
                     float y = alongX ? yaw + 90f : yaw;
-                    bool truck = (dt == DistrictType.Docks || dt == DistrictType.Industrial) && rng.Chance(0.35f);
-                    if (truck) { Truck(mb, p, y); t += 8f; }
-                    else { Car(mb, p, y, rng.Pick(Palette.CarPaint)); t += 5f; }
+                    if (rng.Chance(0.5f)) y += 180f;     // parked either way round
+                    if (VehicleKit.Car(mb, rng, model, p, y) > 0f) t += len + 0.6f;
                 }
                 t += rng.Range(1.5f, 7f);
             }
         }
-
-        /// <summary>A 1920s sedan (Model-T-ish), centred at p on the road, facing yaw.</summary>
-        public void Car(MeshBuilder mb, Vector3 p, float yaw, Color color)
-        {
-            Quaternion q = Quaternion.Euler(0f, yaw, 0f);
-            Vector3 R = q * Vector3.right, F = q * Vector3.forward;
-            Vector3 P(float x, float y, float z) => p + R * x + Vector3.up * y + F * z;
-            Material paint = Paint(color);
-
-            mb.AddOrientedBox(P(0, 0.42f, 0), new Vector3(1.72f, 0.06f, 3.3f), yaw, iron, iron);          // running boards
-            mb.AddOrientedBox(P(0, 0.48f, -0.45f), new Vector3(1.42f, 0.62f, 2.2f), yaw, paint, paint);   // body
-            mb.AddOrientedBox(P(0, 0.52f, 1.12f), new Vector3(0.95f, 0.5f, 1.1f), yaw, paint, paint);     // hood
-            mb.AddOrientedBox(P(0, 0.5f, 1.7f), new Vector3(0.9f, 0.62f, 0.1f), yaw, chrome, chrome);     // radiator
-            mb.AddOrientedBox(P(0, 1.1f, -0.45f), new Vector3(1.36f, 0.55f, 1.65f), yaw, glass, glass);   // cabin glass
-            mb.AddOrientedBox(P(0, 1.65f, -0.45f), new Vector3(1.46f, 0.08f, 1.85f), yaw, paint, paint);  // roof
-            foreach (float sx in new[] { -0.66f, 0.66f })
-            {
-                mb.AddOrientedBox(P(sx, 1.1f, 0.38f), new Vector3(0.06f, 0.55f, 0.06f), yaw, paint, paint);  // A pillar
-                mb.AddOrientedBox(P(sx, 1.1f, -1.3f), new Vector3(0.06f, 0.55f, 0.06f), yaw, paint, paint); // C pillar
-                mb.AddOrientedBox(P(sx * 1.08f, 0.66f, 1.05f), new Vector3(0.34f, 0.1f, 0.95f), yaw, paint, paint);  // front fender
-                mb.AddOrientedBox(P(sx * 1.08f, 0.66f, -1.1f), new Vector3(0.34f, 0.1f, 0.8f), yaw, paint, paint);  // rear fender
-                mb.AddSphere(P(sx * 0.62f, 0.95f, 1.62f), new Vector3(0.12f, 0.12f, 0.12f), 6, 4, chrome);           // headlamp
-                foreach (float sz in new[] { 1.08f, -1.12f })
-                    mb.AddCylinderAxis(P(sx * 1.08f, 0.36f, sz), R, 0.36f, 0.17f, 8, tire, hub);
-            }
-            mb.AddCylinderAxis(P(0, 0.72f, -1.63f), F, 0.34f, 0.16f, 8, tire, hub);                          // spare
-        }
-
-        void Truck(MeshBuilder mb, Vector3 p, float yaw)
-        {
-            Quaternion q = Quaternion.Euler(0f, yaw, 0f);
-            Vector3 R = q * Vector3.right, F = q * Vector3.forward;
-            Vector3 P(float x, float y, float z) => p + R * x + Vector3.up * y + F * z;
-            Material paint = Paint(rng.Pick(new[] { new Color(0.12f, 0.18f, 0.13f), new Color(0.2f, 0.17f, 0.12f), new Color(0.05f, 0.05f, 0.05f) }));
-
-            mb.AddOrientedBox(P(0, 0.45f, 0), new Vector3(1.6f, 0.25f, 5.6f), yaw, iron, iron);           // chassis
-            mb.AddOrientedBox(P(0, 0.7f, 2.2f), new Vector3(1.1f, 0.65f, 1.2f), yaw, paint, paint);       // hood
-            mb.AddOrientedBox(P(0, 0.7f, 1.0f), new Vector3(1.7f, 1.6f, 1.2f), yaw, paint, paint);        // cab
-            mb.AddOrientedBox(P(0, 1.55f, 1.62f), new Vector3(1.5f, 0.5f, 0.05f), yaw, glass, glass);     // windscreen
-            mb.AddOrientedBox(P(0, 0.7f, -1.35f), new Vector3(2.0f, 0.12f, 3.5f), yaw, crate, crate);     // flatbed
-            int crates = rng.RangeInclusive(2, 6);
-            for (int i = 0; i < crates; i++)
-            {
-                float s = rng.Range(0.6f, 0.95f);
-                mb.AddOrientedBox(P(rng.Range(-0.5f, 0.5f), 0.82f, rng.Range(-2.7f, -0.2f)), new Vector3(s, s, s), yaw + rng.Range(-8f, 8f), crate, crate, 1f);
-            }
-            foreach (float sx in new[] { -0.82f, 0.82f })
-                foreach (float sz in new[] { 2.1f, -1.0f, -2.3f })
-                    mb.AddCylinderAxis(P(sx, 0.42f, sz), R, 0.42f, 0.22f, 8, tire, hub);
-        }
-
         // ------------------------------------------------------------------ cargo + laundry
 
         void Cargo(MeshBuilder mb, Vector3 p)

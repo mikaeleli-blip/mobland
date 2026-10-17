@@ -65,3 +65,16 @@ python Tools/textures/generate.py asphalt    # just one set
 
 Facade textures are atlases of 4 window bays x 4 floors; buildings map one atlas cell per bay with a random offset,
 and the `_e` emission maps light windows at night.
+
+## Vehicle and boat models
+
+Cars, trucks and boats are modelled in code with Blender's Python module and exported as compact `.bytes` meshes
+(`Assets/Mobland/Resources/Mobland/Models`) that the game loads at runtime with per-vehicle paint:
+
+```
+pip install bpy            # Blender as a Python module (Python 3.13 for bpy 5.x)
+python Tools/blender/build_models.py                        # all models
+python Tools/blender/build_models.py car_limo --preview out # one model + a Cycles preview render
+```
+
+Models: `car_sedan`, `car_limo`, `car_touring`, `truck_stake`, `truck_van`, `boat_freighter`, `boat_tug`, `boat_rumrunner`, `boat_barge`.

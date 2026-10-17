@@ -58,6 +58,7 @@ namespace Mobland.City
             dresser.Build(root);
 
             StaticBatchingUtility.Combine(rootGo);
+            SpawnBoats();                      // after batching: boats bob, so they stay dynamic
             return new CityBuildResult
             {
                 Model = city, Root = root, DistrictOverlay = overlay,
@@ -551,8 +552,6 @@ namespace Mobland.City
         void BuildPiers(MeshBuilder mb)
         {
             Material wood = S("planks"), shedWall = S("wall_brick_soot"), roof = S("roof_tar"), pile = S("planks");
-            Material hull = MaterialLibrary.Get(Palette.BoatHull, 0.4f), cabin = MaterialLibrary.Get(Palette.BoatCabin, 0.3f);
-            Material funnel = MaterialLibrary.Get(new Color(0.55f, 0.15f, 0.1f), 0.3f), black = MaterialLibrary.Get(new Color(0.05f, 0.05f, 0.05f), 0.3f);
             int bx = cfg.blocksX;
 
             void Pier(BlockInfo block, bool west)
@@ -584,38 +583,7 @@ namespace Mobland.City
                     mb.AddTriangle(b, c, b2, Vector3.right, shedWall, 2f);
                 }
 
-                if (rng.Chance(0.5f))
-                {
-                    // freighter moored alongside
-                    float side = rng.Chance(0.5f) ? 1f : -1f;
-                    float bw = rng.Range(6f, 8f);
-                    float bz0 = zc + side * (width * 0.5f + 1f);
-                    float bz1 = bz0 + side * bw;
-                    float zmin = Mathf.Min(bz0, bz1), zmax = Mathf.Max(bz0, bz1);
-                    float bl = Mathf.Min(len - 4f, rng.Range(22f, 34f));
-                    float bxs = west ? -len + 2f : city.Width + len - 2f - bl;
-                    float bowX = west ? bxs : bxs + bl;
-                    float sternX = west ? bxs + bl : bxs;
-                    float dir = west ? 1f : -1f; // from bow towards stern
-                    float bodyStart = bowX + dir * 4f;
-                    mb.AddBoxXZ(Mathf.Min(bodyStart, sternX), Mathf.Max(bodyStart, sternX), -2f, 1.2f, zmin, zmax, hull);
-                    // pointed bow
-                    Vector3 tip = new Vector3(bowX, 1.2f, (zmin + zmax) / 2), tipLow = new Vector3(bowX + dir * 1f, -2f, (zmin + zmax) / 2);
-                    Vector3 l = new Vector3(bodyStart, 1.2f, zmin), rr = new Vector3(bodyStart, 1.2f, zmax);
-                    Vector3 lL = new Vector3(bodyStart, -2f, zmin), rL = new Vector3(bodyStart, -2f, zmax);
-                    mb.AddQuad(lL, l, tip, tipLow, new Vector3(-dir, 0, -1).normalized, hull);
-                    mb.AddQuad(rL, rr, tip, tipLow, new Vector3(-dir, 0, 1).normalized, hull);
-                    mb.AddTriangle(l, tip, rr, Vector3.up, MaterialLibrary.Get(new Color(0.3f, 0.25f, 0.2f), 0.2f));
-                    // superstructure + funnel
-                    float cMid = bxs + bl * (west ? 0.65f : 0.35f);
-                    mb.AddBoxXZ(cMid - 3f, cMid + 3f, 1.2f, 4.2f, zmin + 1f, zmax - 1f, cabin);
-                    mb.AddBoxXZ(cMid - 2f, cMid + 2f, 4.2f, 5.6f, zmin + 1.5f, zmax - 1.5f, cabin);
-                    mb.AddCylinder(new Vector3(cMid + dir * 0.5f, 5.6f, (zmin + zmax) / 2), 0.8f, 3.2f, 10, funnel, true);
-                    mb.AddCylinder(new Vector3(cMid + dir * 0.5f, 8.2f, (zmin + zmax) / 2), 0.82f, 0.6f, 10, black, true);
-                    // cargo hatches + mast
-                    mb.AddBoxXZ(bodyStart + dir * 2f - 2f, bodyStart + dir * 2f + 2f, 1.2f, 1.7f, zmin + 1.5f, zmax - 1.5f, S("planks"), tile: 2f);
-                    mb.AddBeam(new Vector3(bodyStart + dir * 5f, 1.2f, (zmin + zmax) / 2), new Vector3(bodyStart + dir * 5f, 11f, (zmin + zmax) / 2), 0.25f, black);
-                }
+                piers.Add(new PierInfo { X0 = Mathf.Min(x0, x1), X1 = Mathf.Max(x0, x1), Z = zc, Width = width, West = west });
             }
 
             for (int j = 0; j < cfg.blocksZ; j++)
@@ -654,6 +622,70 @@ namespace Mobland.City
                     mb.AddBoxXZ(ax - 3.8f, ax + 3.8f, h - 0.9f, h, z - 0.25f, z + 0.25f, steel, true, 2f);  // cross girder
                 }
             }
+        }
+
+        struct PierInfo { public float X0, X1, Z, Width; public bool West; }
+        readonly List<PierInfo> piers = new List<PierInfo>();
+
+        /// <summary>Freighters, tugs, barges and rum-runners at the piers and at anchor in the rivers.</summary>
+        void SpawnBoats()
+        {
+            var parent = new GameObject("Boats").transform;
+            parent.SetParent(root, false);
+            float water = -1.2f;
+            var brng = new SeededRandom(city.Seed * 31 + 7);
+
+            foreach (var p in piers)
+            {
+                float outward = p.West ? -1f : 1f;               // towards open water
+                float yawOut = p.West ? -90f : 90f;              // bow pointing out to the river
+                float mid = (p.X0 + p.X1) * 0.5f;
+                float len = p.X1 - p.X0;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float r = brng.Value;
+                    float edge = p.Z + side * p.Width * 0.5f;
+                    if (r < 0.42f && len > 30f)
+                    {
+                        float x = mid + outward * Mathf.Max(4f, 22f - len * 0.5f + 3f);   // keep the stern clear of the quay
+                        VehicleKit.Boat("boat_freighter", new Vector3(x, water, edge + side * 4.6f), yawOut + (brng.Chance(0.3f) ? 180f : 0f),
+                            VehicleKit.BoatLook(brng), parent, 1f);
+                        if (brng.Chance(0.35f))   // tug alongside the freighter
+                            VehicleKit.Boat("boat_tug", new Vector3(x + outward * 12f, water, edge + side * 11.6f), yawOut, VehicleKit.BoatLook(brng), parent, 1.6f);
+                    }
+                    else if (r < 0.62f)
+                        VehicleKit.Boat("boat_barge", new Vector3(mid + outward * brng.Range(-4f, 6f), water, edge + side * 4.4f), yawOut + (brng.Chance(0.5f) ? 180f : 0f),
+                            VehicleKit.BoatLook(brng), parent, 0.7f);
+                    else if (r < 0.74f)
+                        VehicleKit.Boat("boat_tug", new Vector3(mid + outward * brng.Range(0f, 8f), water, edge + side * 3.4f), yawOut + (brng.Chance(0.5f) ? 180f : 0f),
+                            VehicleKit.BoatLook(brng), parent, 1.6f);
+                    else if (r < 0.82f)
+                        VehicleKit.Boat("boat_rumrunner", new Vector3((p.West ? p.X0 : p.X1) - outward * brng.Range(4f, 9f), water, edge + side * 1.8f),
+                            yawOut + (brng.Chance(0.5f) ? 180f : 0f), VehicleKit.BoatLook(brng), parent, 2.5f);
+                }
+            }
+
+            // At anchor out in the rivers.
+            float ww = cfg.waterWidth;
+            void Anchored(bool west)
+            {
+                if (west && !cfg.waterfrontWest || !west && !cfg.waterfrontEast) return;
+                int n = brng.RangeInclusive(3, 6);
+                for (int i = 0; i < n; i++)
+                {
+                    float dist = cfg.pierLength * 1.25f + brng.Range(25f, Mathf.Max(30f, ww * 0.55f));
+                    float x = west ? -dist : city.Width + dist;
+                    float z = brng.Range(city.Depth * 0.05f, city.Depth * 0.95f);
+                    float yaw = brng.Chance(0.5f) ? 0f : 180f;
+                    yaw += brng.Range(-12f, 12f);
+                    float r = brng.Value;
+                    string model = r < 0.45f ? "boat_freighter" : r < 0.7f ? "boat_barge" : r < 0.9f ? "boat_tug" : "boat_rumrunner";
+                    float bob = model == "boat_freighter" ? 1f : model == "boat_barge" ? 0.7f : model == "boat_tug" ? 1.6f : 2.5f;
+                    VehicleKit.Boat(model, new Vector3(x, water, z), yaw, VehicleKit.BoatLook(brng), parent, bob);
+                }
+            }
+            Anchored(true);
+            Anchored(false);
         }
 
         readonly Dictionary<DistrictInfo, Material> overlayMats = new Dictionary<DistrictInfo, Material>();
