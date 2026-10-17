@@ -10,7 +10,7 @@ Turn-based empire layer; fights are auto-resolved for now, and the systems are b
 3. On first open the editor creates `Assets/Mobland/Scenes/Main.unity` and opens it (or use the **Mobland → Create Main Scene** menu).
 4. Press **Play**.
 
-Works with the Built-in render pipeline or URP, and with either the legacy Input Manager or the new Input System package.
+Uses URP (configured automatically on first open: Forward+, HDR, soft shadows, SSAO, post-processing). Menu **Mobland → Graphics** re-runs the URP setup or rebuilds materials.
 
 ## Controls (Milestone 1)
 
@@ -23,12 +23,15 @@ Works with the Built-in render pipeline or URP, and with either the legacy Input
 | Left-click | Select building (Esc clears) |
 | Tab | District map overlay |
 | Home | Reset view |
+| T | Pause / resume the clock |
+| N | Skip to next time of day (morning, noon, dusk, night) |
 | R | Generate a new city |
 | F1 | Toggle help |
 
 ## Roadmap
 
-1. **City generator** (done): procedural Manhattan-style grid, districts, lots, placeholder 3D buildings, strategy camera.
+1. **City generator** (done): procedural Manhattan-style grid, districts, lots, 3D buildings, strategy camera.
+1b. **Graphics** (done): URP + post-processing, procedural PBR textures, bay-mapped facades, street props, day/night cycle with lit windows, street lamps and chimney smoke.
 2. **Economy loop**: buy buildings, set up rackets (speakeasy, brewery, casino, protection), cash per turn, booze supply chains.
 3. **Crew**: hire gangsters with stats and loyalty, assign them to buildings and jobs.
 4. **Rival families**: AI gangs that expand, raid and negotiate; auto-resolved fights.
@@ -49,5 +52,15 @@ Assets/Mobland/
 ```
 
 City data (`CityModel`: districts, blocks, buildings) is separate from the visuals, so gameplay systems never depend on meshes.
-All buildings are placeholder geometry, to be swapped for a modular Blender kit later.
+## Textures
+
+All textures are generated procedurally by `Tools/textures/generate.py` (Python + numpy + Pillow):
+
+```
+python Tools/textures/generate.py            # everything
+python Tools/textures/generate.py asphalt    # just one set
+```
+
+Facade textures are atlases of 4 window bays x 4 floors; buildings map one atlas cell per bay with a random offset,
+and the `_e` emission maps light windows at night.
 Tune the city via **Assets → Create → Mobland → City Config** and assign it to the `GameRoot`.
