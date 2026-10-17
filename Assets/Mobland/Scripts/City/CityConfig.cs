@@ -75,7 +75,7 @@ namespace Mobland.City
         public float floorHeight = 3.2f;
 
         [Header("Districts")]
-        [Range(3, 20)] public int districtCount = 9;
+        [Range(3, 20)] public int districtCount = 12;
         [Range(0f, 0.3f)] public float parkChance = 0.04f;
         [Range(0f, 0.3f)] public float emptyLotChance = 0.05f;
         public List<DistrictProfile> districtProfiles = DefaultProfiles();

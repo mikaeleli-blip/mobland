@@ -75,7 +75,7 @@ namespace Mobland.City
                 float towerTop = baseTop + towerFloors * fh;
                 mb.AddBoxXZ(tx0, tx1, baseTop, towerTop, tz0, tz1, facade);
                 AddRoof(mb, tx0, tx1, tz0, tz1, towerTop, roof);
-                mb.AddBoxXZ(tx0 - 0.2f, tx1 + 0.2f, towerTop - 0.4f, towerTop + 0.25f, tz0 - 0.2f, tz1 + 0.2f, trim);
+                AddCorniceRing(mb, tx0, tx1, tz0, tz1, towerTop, trim);
                 float tzFront = b.FacesNorth ? tz1 : tz0, tzBack = b.FacesNorth ? tz0 : tz1;
                 // Window rows start at the base roof; floor index offset keeps spacing consistent.
                 AddWindowsZFace(mb, tx0, tx1, tzFront, s, baseTop, fh, 0, towerFloors, style, rng);
@@ -131,6 +131,15 @@ namespace Mobland.City
 
         static bool HasSpecialGroundFloor(BuildingType t) =>
             t == BuildingType.Shopfront || t == BuildingType.Warehouse || t == BuildingType.Factory || t == BuildingType.Office || t == BuildingType.Tenement;
+
+        static void AddCorniceRing(MeshBuilder mb, float x0, float x1, float z0, float z1, float top, Material trim)
+        {
+            const float o = 0.2f, t = 0.45f, y0 = -0.4f, y1 = 0.3f;
+            mb.AddBoxXZ(x0 - o, x1 + o, top + y0, top + y1, z0 - o, z0 - o + t, trim);
+            mb.AddBoxXZ(x0 - o, x1 + o, top + y0, top + y1, z1 + o - t, z1 + o, trim);
+            mb.AddBoxXZ(x0 - o, x0 - o + t, top + y0, top + y1, z0 - o + t, z1 + o - t, trim);
+            mb.AddBoxXZ(x1 + o - t, x1 + o, top + y0, top + y1, z0 - o + t, z1 + o - t, trim);
+        }
 
         static void AddRoof(MeshBuilder mb, float x0, float x1, float z0, float z1, float y, Material roof)
         {

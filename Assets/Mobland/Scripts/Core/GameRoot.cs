@@ -101,13 +101,12 @@ namespace Mobland.Core
         static void SetupLighting(Camera cam)
         {
             Light sun = null;
-#if UNITY_2023_1_OR_NEWER
-            var lights = FindObjectsByType<Light>(FindObjectsSortMode.None);
-#else
-            var lights = FindObjectsOfType<Light>();
-#endif
-            foreach (var l in lights)
-                if (l.type == LightType.Directional) { sun = l; break; }
+            if (RenderSettings.sun != null) sun = RenderSettings.sun;
+            if (sun == null)
+            {
+                var go = GameObject.Find("Directional Light");
+                if (go != null) sun = go.GetComponent<Light>();
+            }
             if (sun == null)
             {
                 sun = new GameObject("Sun").AddComponent<Light>();

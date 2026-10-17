@@ -95,6 +95,7 @@ namespace Mobland.City
             public DistrictType Type;
             public Vector2 Pos;
             public float Scale; // >1 makes the district smaller
+            public bool West;
         }
 
         void AssignDistricts()
@@ -104,16 +105,16 @@ namespace Mobland.City
             var seeds = new List<DistrictSeed>();
 
             int docksPerSide = Mathf.Max(1, Mathf.RoundToInt(cfg.blocksZ / 6f));
-            void AddDocks(float xPos)
+            void AddDocks(float xPos, bool west)
             {
                 for (int k = 0; k < docksPerSide; k++)
                 {
                     float z0 = D * k / docksPerSide, z1 = D * (k + 1) / docksPerSide;
-                    seeds.Add(new DistrictSeed { Type = DistrictType.Docks, Pos = new Vector2(xPos, rng.Range(z0, z1)), Scale = 2.2f });
+                    seeds.Add(new DistrictSeed { Type = DistrictType.Docks, Pos = new Vector2(xPos, rng.Range(z0, z1)), Scale = 2.2f, West = west });
                 }
             }
-            if (cfg.waterfrontWest) AddDocks(colX[0] + colW[0] * 0.5f);
-            if (cfg.waterfrontEast && bx > 1) AddDocks(colX[bx - 1] + colW[bx - 1] * 0.5f);
+            if (cfg.waterfrontWest) AddDocks(colX[0] + colW[0] * 0.5f, true);
+            if (cfg.waterfrontEast && bx > 1) AddDocks(colX[bx - 1] + colW[bx - 1] * 0.5f, false);
 
             // Money downtown (south), wealth uptown (north) - like Manhattan.
             seeds.Add(new DistrictSeed { Type = DistrictType.FinancialDistrict, Pos = new Vector2(rng.Range(W * 0.3f, W * 0.7f), rng.Range(0f, D * 0.18f)), Scale = 1f });
@@ -149,7 +150,10 @@ namespace Mobland.City
             foreach (var s in seeds)
             {
                 var profile = cfg.GetProfile(s.Type);
-                districts.Add(new DistrictInfo { Type = s.Type, Profile = profile, Name = UniqueName(profile, used) });
+                string name = s.Type == DistrictType.Docks
+                    ? UniqueFrom(s.West ? WestDocks : EastDocks, used, s.West ? "Hudson Piers" : "East River Docks")
+                    : UniqueName(profile, used);
+                districts.Add(new DistrictInfo { Type = s.Type, Profile = profile, Name = name });
             }
 
             // Nearest (scaled) seed wins each block.
@@ -175,6 +179,17 @@ namespace Mobland.City
                 d.Id = city.Districts.Count;
                 city.Districts.Add(d);
             }
+        }
+
+        static readonly string[] WestDocks = { "Hudson Piers", "West Side Docks", "Chelsea Piers", "Gansevoort Piers", "Hell's Kitchen Piers" };
+        static readonly string[] EastDocks = { "East River Docks", "South Street Seaport", "Coenties Slip", "Corlears Hook", "Kips Bay Wharf" };
+
+        string UniqueFrom(string[] names, HashSet<string> used, string fallback)
+        {
+            var pool = new List<string>(names);
+            rng.Shuffle(pool);
+            foreach (var n in pool) if (used.Add(n)) return n;
+            for (int i = 2; ; i++) { string n = $"{fallback} {i}"; if (used.Add(n)) return n; }
         }
 
         string UniqueName(DistrictProfile profile, HashSet<string> used)

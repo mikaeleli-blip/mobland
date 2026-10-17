@@ -6,6 +6,6 @@ namespace Mobland.City
     [DisallowMultipleComponent]
     public sealed class BuildingView : MonoBehaviour
     {
-        public BuildingInfo Info;
+        [System.NonSerialized] public BuildingInfo Info;
     }
 }
