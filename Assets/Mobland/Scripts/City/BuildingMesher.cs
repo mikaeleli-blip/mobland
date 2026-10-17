@@ -19,7 +19,7 @@ namespace Mobland.City
             new Color(0.95f, 0.85f, 0.75f), new Color(0.7f, 0.7f, 0.72f), new Color(1.25f, 1.2f, 1.1f),
         };
 
-        static Material skylightMat;
+        static Material skylightMat, skylightDark;
         static Material S(string name) => MaterialLibrary.Surface(name);
 
         /// <summary>World positions where smoke should rise (factory chimneys). Filled during generation.</summary>
@@ -193,19 +193,23 @@ namespace Mobland.City
         {
             Rect r = b.Footprint;
             if (r.width < 4f || r.height < 5f) return;
-            if (skylightMat == null) skylightMat = MaterialLibrary.Glow(new Color(0.18f, 0.2f, 0.2f), new Color(1f, 0.78f, 0.5f), 1.6f);
+            if (skylightMat == null)
+            {
+                skylightMat = MaterialLibrary.Glow(new Color(0.16f, 0.18f, 0.18f), new Color(1f, 0.72f, 0.42f), 0.35f);
+                skylightDark = MaterialLibrary.Get(new Color(0.12f, 0.14f, 0.15f), 0.85f);
+            }
             Material metal = C(new Color(0.32f, 0.33f, 0.33f), 0.35f, 0.6f);
             Material wood = C(new Color(0.38f, 0.3f, 0.22f), 0.1f);
             float X() => rng.Range(r.xMin + 1.2f, r.xMax - 1.2f);
             float Z() => rng.Range(r.yMin + 1.2f, r.yMax - 1.2f);
 
             // skylights (glow at night)
-            int sky = b.Type == BuildingType.Warehouse || b.Type == BuildingType.Factory ? rng.RangeInclusive(2, 5) : rng.Range(0, 2);
+            int sky = b.Type == BuildingType.Warehouse || b.Type == BuildingType.Factory ? rng.RangeInclusive(1, 3) : rng.Range(0, 2);
             for (int i = 0; i < sky; i++)
             {
                 float x = X(), z = Z();
-                float w = b.Type == BuildingType.Factory ? 1.4f : 0.7f, l = b.Type == BuildingType.Factory ? 4f : 1f;
-                mb.AddBoxXZ(x - w, x + w, y, y + 0.35f, z - l, z + l, skylightMat, side: metal);
+                float w = b.Type == BuildingType.Factory ? 1.0f : 0.55f, l = b.Type == BuildingType.Factory ? 2.5f : 0.8f;
+                mb.AddBoxXZ(x - w, x + w, y, y + 0.35f, z - l, z + l, rng.Chance(0.35f) ? skylightMat : skylightDark, side: metal);
             }
             // vents
             int vents = rng.RangeInclusive(1, 4);
